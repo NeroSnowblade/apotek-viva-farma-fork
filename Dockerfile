@@ -10,8 +10,8 @@ COPY resources resources
 RUN npm ci
 RUN npm run build
 
-# Stage 2: PHP runtime with Apache
-FROM php:8.2-apache
+# Stage 2: PHP runtime (CLI) - suitable for running `php artisan serve`
+FROM php:8.2-cli
 
 # System deps and PHP extensions
 RUN apt-get update && apt-get install -y \
@@ -22,13 +22,11 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     git \
+    procps \
     && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-# Enable apache mod_rewrite
-RUN a2enmod rewrite
 
 WORKDIR /var/www/html
 
@@ -38,13 +36,17 @@ COPY . /var/www/html
 # Copy built assets from node stage into public
 COPY --from=node-build /app/public /var/www/html/public
 
-# Install PHP deps (including dev for demo projects)
-RUN composer install --optimize-autoloader --no-interaction || true
+# Install PHP deps (include dev deps for demo).
+# Fail the build if composer install fails so we catch issues early.
+RUN composer install --optimize-autoloader --no-interaction
 
 # Permissions (safe for demo)
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
+RUN chown -R 1000:1000 /var/www/html/storage /var/www/html/bootstrap/cache || true
 
-EXPOSE 80
+# Expose the port that php artisan serve will use (Railway provides $PORT at runtime)
+EXPOSE 8000
+
+# Copy start script and make executable
 COPY scripts/start-railway.sh /var/www/html/scripts/start-railway.sh
 RUN chmod +x /var/www/html/scripts/start-railway.sh || true
 
