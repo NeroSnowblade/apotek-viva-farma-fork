@@ -45,4 +45,8 @@ RUN composer install --optimize-autoloader --no-interaction || true
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
 
 EXPOSE 80
-CMD ["apache2-foreground"]
+COPY scripts/start-railway.sh /var/www/html/scripts/start-railway.sh
+RUN chmod +x /var/www/html/scripts/start-railway.sh || true
+
+# Default command: run artisan serve so Railway can start the app using $PORT
+CMD ["bash", "/var/www/html/scripts/start-railway.sh"]
