@@ -52,4 +52,4 @@ COPY scripts/start-railway.sh /var/www/html/scripts/start-railway.sh
 RUN chmod +x /var/www/html/scripts/start-railway.sh || true
 
 # Start app with php artisan serve (start script uses $PORT if provided)
-CMD ["bash", "/var/www/html/scripts/start-railway.sh"]
+CMD ["sh", "/var/www/html/scripts/start-railway.sh"]

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 set -e
 
 # Start script for Railway: ensure storage link, run migrations (optional), then start PHP built-in server
