@@ -29,6 +29,14 @@ if [ "${DB_CONNECTION}" = "sqlite" ]; then
   fi
 fi
 
+# (Optional) Run seeders if RAILWAY_RUN_SEEDS is set
+if [ "${RAILWAY_RUN_SEEDS:-false}" = "true" ]; then
+  SEED_CLASS=${RAILWAY_SEED_CLASS:-DatabaseSeeder}
+  echo "Running database seeders (class=${SEED_CLASS})..."
+  # Use --force so it runs in non-interactive containers
+  php artisan db:seed --class=${SEED_CLASS} --force || true
+fi
+
 # Use PORT provided by Railway (or default to 8000)
 PORT=${PORT:-8000}
 echo "PORT=${PORT} -- starting server"

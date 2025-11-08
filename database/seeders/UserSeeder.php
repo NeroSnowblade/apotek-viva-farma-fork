@@ -15,7 +15,7 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         // Data Pengguna Admin
-        User::create([
+        User::updateOrCreate([
             'namaUser' => 'Admin Apotek',
             'username' => 'admin',
             'password' => Hash::make('password123'),
@@ -23,7 +23,7 @@ class UserSeeder extends Seeder
         ]);
 
         // Data Pengguna Apoteker
-        User::create([
+        User::updateOrCreate([
             'namaUser' => 'Apoteker Handal',
             'username' => 'apoteker',
             'password' => Hash::make('password123'),
@@ -31,7 +31,7 @@ class UserSeeder extends Seeder
         ]);
 
         // Data Pengguna Kasir
-        User::create([
+        User::updateOrCreate([
             'namaUser' => 'Kasir Cepat',
             'username' => 'kasir',
             'password' => Hash::make('password123'),
