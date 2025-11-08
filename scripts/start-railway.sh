@@ -10,9 +10,23 @@ if [ ! -L public/storage ]; then
   php artisan storage:link || true
 fi
 
-# (Optional) Run migrations if RAILWAY_RUN_MIGRATIONS is set
-if [ "${RAILWAY_RUN_MIGRATIONS:-false}" = "true" ]; then
-  php artisan migrate --force || true
+# Ensure database directory and sqlite file exist (for SQLite setup)
+if [ "${DB_CONNECTION}" = "sqlite" ]; then
+  # ensure directory exists
+  mkdir -p database
+  if [ ! -f database/database.sqlite ]; then
+    echo "Creating SQLite database file at database/database.sqlite"
+    touch database/database.sqlite
+    # try best-effort permission fix; harmless when it fails on some hosts
+    chown -R www-data:www-data database || true
+    chmod 664 database/database.sqlite || true
+  fi
+
+  # (Optional) Run migrations if RAILWAY_RUN_MIGRATIONS is set
+  if [ "${RAILWAY_RUN_MIGRATIONS:-false}" = "true" ]; then
+    echo "Running migrations (SQLite)..."
+    php artisan migrate --force || true
+  fi
 fi
 
 # Use PORT provided by Railway (or default to 8000)
