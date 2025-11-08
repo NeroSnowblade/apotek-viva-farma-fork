@@ -10,20 +10,22 @@ COPY resources resources
 RUN npm ci --prefer-offline --no-audit --progress=false
 RUN npm run build
 
-# Stage 2: PHP runtime (CLI) - runs `php artisan serve` as entrypoint
-FROM php:8.2-cli
+# Stage 2: PHP runtime (Apache)
+FROM php:8.2-apache
 
-# Install system deps and PHP extensions required by Laravel
+# Install system deps and PHP extensions required by Laravel (including SQLite)
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
     libzip-dev \
+    libsqlite3-dev \
     zip \
     unzip \
     git \
     procps \
-    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
+    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif pcntl bcmath gd zip || true \
+    && rm -rf /var/lib/apt/lists/*
 
 # Composer (copy from official composer image)
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -44,12 +46,19 @@ COPY --from=node-build /app/public /var/www/html/public
 RUN mkdir -p /var/www/html/storage /var/www/html/bootstrap/cache \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
 
-# Expose the default PHP built-in server port (Railway will provide $PORT at runtime)
-EXPOSE 8000
+# Ensure Apache serves the `public` directory
+RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/*.conf \
+    && sed -ri 's!<Directory /var/www/html>!<Directory /var/www/html/public>!g' /etc/apache2/apache2.conf || true
+
+# Enable mod_rewrite for Laravel routing
+RUN a2enmod rewrite headers
+
+# Expose HTTP port
+EXPOSE 80
 
 # Copy start script and make executable
 COPY scripts/start-railway.sh /var/www/html/scripts/start-railway.sh
 RUN chmod +x /var/www/html/scripts/start-railway.sh || true
 
-# Start app with php artisan serve (start script uses $PORT if provided)
+# Default command: run our start script which will run migrations (optional) then start Apache
 CMD ["sh", "/var/www/html/scripts/start-railway.sh"]

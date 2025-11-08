@@ -31,7 +31,14 @@ fi
 
 # Use PORT provided by Railway (or default to 8000)
 PORT=${PORT:-8000}
+echo "PORT=${PORT} -- starting server"
 
-echo "Starting PHP built-in server on 0.0.0.0:${PORT}"
-
-php artisan serve --host=0.0.0.0 --port=${PORT}
+# If Apache is available (php:apache image), prefer it. Otherwise fallback to php artisan serve.
+if command -v apache2-foreground >/dev/null 2>&1; then
+  echo "Starting Apache (apache2-foreground)..."
+  # exec so PID 1 is apache and logs are attached to container
+  exec apache2-foreground
+else
+  echo "Starting PHP built-in server on 0.0.0.0:${PORT}"
+  exec php artisan serve --host=0.0.0.0 --port=${PORT}
+fi
