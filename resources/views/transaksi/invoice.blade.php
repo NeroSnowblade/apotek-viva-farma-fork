@@ -72,7 +72,7 @@
                     <div class="mt-8 text-center">
                         <p class="text-sm text-gray-600">Terima kasih atas kunjungan Anda.</p>
                         {{-- Tombol untuk kembali ke POS --}}
-                        @if(auth()->check() && !in_array(auth()->user()->level, ['admin', 'apoteker']))
+                        @if(auth()->check() && !in_array(auth()->user()->level, ['apoteker']))
                             <a href="{{ route('transaksi.create') }}" class="mt-4 inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700">
                                 Transaksi Baru
                             </a>

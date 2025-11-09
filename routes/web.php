@@ -42,8 +42,8 @@ Route::middleware(['auth', 'check.level:admin'])->group(function () {
     Route::resource('/admin/users', UserController::class);
 });
 
-// Rute khusus APOTEKER (Manajemen Obat)
-Route::middleware(['auth', 'check.level:apoteker'])->group(function () {
+// Rute khusus APOTEKER (Manajemen Obat) - allow admin as well for management
+Route::middleware(['auth', 'check.level:apoteker,admin'])->group(function () {
     // Apoteker bisa ikut pakai dashboard admin
     Route::get('/apoteker/dashboard', [DashboardController::class, 'apoteker'])->name('apoteker.dashboard');
 
@@ -55,8 +55,8 @@ Route::middleware(['auth', 'check.level:apoteker'])->group(function () {
     Route::delete('/obat/{obat}', [ObatController::class, 'destroy'])->name('obat.destroy');
 });
 
-// Grup Rute untuk Kasir
-Route::middleware(['auth', 'check.level:kasir'])->group(function () {
+// Grup Rute untuk Kasir (allow admin to create transactions)
+Route::middleware(['auth', 'check.level:kasir,admin'])->group(function () {
     Route::get('/kasir/dashboard', [DashboardController::class, 'kasir'])->name('kasir.dashboard');
 
     Route::get('/transaksi/baru', [TransaksiController::class, 'create'])->name('transaksi.create');
