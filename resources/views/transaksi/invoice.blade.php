@@ -49,7 +49,7 @@
                             <tbody class="divide-y divide-gray-200">
                                 @foreach ($transaksi->details as $item)
                                 <tr>
-                                    <td class="whitespace-nowrap px-4 py-2 font-medium text-gray-900">{{ $item->obat->namaObat }}</td>
+                                    <td class="whitespace-nowrap px-4 py-2 font-medium text-gray-900">{{ $item->nama_obat }}</td>
                                     <td class="whitespace-nowrap px-4 py-2 text-gray-700 text-center">{{ $item->jumlah }}</td>
                                     <td class="whitespace-nowrap px-4 py-2 text-gray-700 text-right">Rp {{ number_format($item->harga_saat_transaksi, 0, ',', '.') }}</td>
                                     <td class="whitespace-nowrap px-4 py-2 text-gray-700 text-right">Rp {{ number_format($item->subtotal, 0, ',', '.') }}</td>

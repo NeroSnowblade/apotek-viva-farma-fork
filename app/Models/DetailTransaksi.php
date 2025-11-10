@@ -15,7 +15,7 @@ class DetailTransaksi extends Model
 
     protected $fillable = [
         'idTransaksi',
-        'idObat',
+        'nama_obat',
         'jumlah',
         'harga_saat_transaksi',
         'subtotal',
@@ -24,8 +24,5 @@ class DetailTransaksi extends Model
     /**
      * Relasi ke Obat
      */
-    public function obat(): BelongsTo
-    {
-        return $this->belongsTo(Obat::class, 'idObat', 'idObat');
-    }
+    // No longer maintain a relation to Obat; we store nama_obat as plain text
 }

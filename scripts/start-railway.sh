@@ -10,6 +10,14 @@ if [ ! -L public/storage ]; then
   php artisan storage:link || true
 fi
 
+# Ensure storage, cache and database directories exist and are writable by Apache (www-data)
+mkdir -p storage/logs bootstrap/cache database || true
+chown -R www-data:www-data storage bootstrap/cache database || true
+chmod -R 775 storage bootstrap/cache database || true
+# Ensure laravel log file exists
+touch storage/logs/laravel.log || true
+chown www-data:www-data storage/logs/laravel.log || true
+
 # Ensure database directory and sqlite file exist (for SQLite setup)
 if [ "${DB_CONNECTION}" = "sqlite" ]; then
   # ensure directory exists

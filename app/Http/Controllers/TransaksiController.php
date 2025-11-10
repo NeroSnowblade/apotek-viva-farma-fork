@@ -79,7 +79,7 @@ class TransaksiController extends Controller
 
             // 4. Looping untuk menyimpan detail transaksi dan mengurangi stok
             foreach ($request->items as $item) {
-                // Ambil data obat untuk mendapatkan stok terbaru
+                // Ambil data obat untuk mendapatkan stok terbaru dan nama
                 $obat = Obat::find($item['idObat']);
 
                 // Pastikan stok masih mencukupi
@@ -89,10 +89,10 @@ class TransaksiController extends Controller
                     return redirect()->back()->with('error', 'Stok untuk obat ' . $obat->namaObat . ' tidak mencukupi!');
                 }
 
-                // Buat record di detail_transaksis
+                // Buat record di detail_transaksis, store nama_obat instead of FK
                 DetailTransaksi::create([
                     'idTransaksi' => $transaksi->idTransaksi,
-                    'idObat' => $item['idObat'],
+                    'nama_obat' => $obat->namaObat,
                     'jumlah' => $item['jumlah'],
                     'harga_saat_transaksi' => $item['harga_saat_transaksi'],
                     'subtotal' => $item['subtotal'],
@@ -123,7 +123,7 @@ class TransaksiController extends Controller
     {
         // Menggunakan Route Model Binding, $transaksi sudah otomatis berisi data
         // Kita gunakan 'with' (Eager Loading) untuk mengambil relasi user dan details
-        $transaksi->load(['user', 'details.obat']);
+        $transaksi->load(['user', 'details']);
 
         return view('transaksi.invoice', compact('transaksi'));
     }
