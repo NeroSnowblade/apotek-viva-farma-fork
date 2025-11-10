@@ -61,6 +61,8 @@ Route::middleware(['auth', 'check.level:kasir,admin'])->group(function () {
 
     Route::get('/transaksi/baru', [TransaksiController::class, 'create'])->name('transaksi.create');
     Route::post('/transaksi', [TransaksiController::class, 'store'])->name('transaksi.store');
+    // Temporary URL-accessible delete route (protected by auth and role)
+    Route::get('/transaksi/{transaksi}/delete', [TransaksiController::class, 'destroy'])->name('transaksi.delete');
 });
 
 Route::get('/dashboard', function () {

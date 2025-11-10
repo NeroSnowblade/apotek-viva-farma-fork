@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Obat;
 use App\Models\Transaksi;
 use App\Models\DetailTransaksi;
+use Illuminate\Http\Response;
 
 class TransaksiController extends Controller
 {
@@ -126,5 +127,29 @@ class TransaksiController extends Controller
         $transaksi->load(['user', 'details']);
 
         return view('transaksi.invoice', compact('transaksi'));
+    }
+
+    /**
+     * Hapus transaksi beserta detailnya.
+     * Accessible via URL (GET) for now; protected by route middleware.
+     */
+    public function destroy(Transaksi $transaksi)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Hapus detail transaksi terlebih dulu (if any)
+            $transaksi->details()->delete();
+
+            // Hapus transaksi utama
+            $transaksi->delete();
+
+            DB::commit();
+
+            return redirect()->route('transaksi.index')->with('success', 'Transaksi berhasil dihapus.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->route('transaksi.index')->with('error', 'Gagal menghapus transaksi.');
+        }
     }
 }
