@@ -20,8 +20,8 @@
 
                     <div class="flex justify-between items-start mb-6">
                         <div>
-                            <h3 class="text-lg font-bold">Apotek Sehat</h3>
-                            <p class="text-sm text-gray-600">Jalan Kenangan No. 12, Kota Indah</p>
+                            <h3 class="text-lg font-bold">Apotek Viva Farma</h3>
+                            <p class="text-sm text-gray-600">Senayan Babakan, Sarinagen, Kec. Cipongkor, Kabupaten Bandung Barat, Jawa Barat 40564</p>
                         </div>
                         <div class="text-right">
                             <h3 class="text-lg font-bold">INVOICE</h3>
