@@ -1,92 +1,79 @@
-# syntax=docker/dockerfile:1.4
+### Multi-stage Dockerfile (builds frontend assets so runtime only runs php artisan serve)
 
-############################################################
-# Fast multi-stage build for Laravel on Railway
-# - Uses BuildKit cache mounts for npm & composer (with explicit ids)
-# - Installs PHP extensions in composer stage so vendor can be copied
-# - Builds frontend in a separate Node stage
-# To use: either set Railway to use this Dockerfile, or rename to Dockerfile
-############################################################
-
-########################
-# 1) Node build (frontend)
-########################
+# Stage 1: Build frontend assets with Node (use non-alpine image for compatibility)
 FROM node:18 AS node-build
 WORKDIR /app
 
-# Copy package files first to leverage cache
-COPY package.json package-lock.json* ./
-COPY vite.config.js postcss.config.js tailwind.config.js ./
-
-# Use BuildKit cache for npm (explicit cache id)
-RUN --mount=type=cache,id=cache-npm,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --progress=false
-
-# Copy only resources that are needed to build frontend
+# Optionally download prebuilt frontend via ARTIFACT_URL, otherwise build
+ARG ARTIFACT_URL
+# Copy package files and lockfile if present, then install and build
+COPY package.json package-lock.json* vite.config.js postcss.config.js tailwind.config.js ./
 COPY resources resources
-COPY public public
+RUN sh -lc '\
+        if [ -n "${ARTIFACT_URL}" ]; then \
+            echo "Downloading prebuilt frontend from ${ARTIFACT_URL}"; \
+            curl -fSL "${ARTIFACT_URL}/public.tar.gz" -o /tmp/public.tar.gz && mkdir -p public && tar -xzf /tmp/public.tar.gz -C public; \
+        else \
+            npm ci --prefer-offline --no-audit --progress=false && npm run build; \
+        fi'
 
-RUN npm run build
+# Stage 2: PHP runtime (Apache)
+FROM php:8.2-apache
 
-########################
-# 2) Composer / vendor stage
-########################
-FROM php:8.2-cli AS composer-stage
-WORKDIR /app
-
-# Install minimal system deps and PHP extensions required by typical Laravel packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system deps and PHP extensions required by Laravel (including SQLite)
+RUN apt-get update && apt-get install -y \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    libsqlite3-dev \
+    zip \
+    unzip \
     git \
-    zip unzip libzip-dev libpng-dev libonig-dev libxml2-dev \
-    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif bcmath gd zip \
+    curl \
+    procps \
+    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif pcntl bcmath gd zip || true \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy composer binary from official composer image (ensures compatible composer)
+# Composer (copy from official composer image)
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy composer files and install dependencies using explicit cache id for composer
-COPY composer.json composer.lock ./
-RUN --mount=type=cache,id=cache-composer,target=/root/.composer/cache \
-    composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
-
-# Ensure vendor directory exists (will be copied to runtime)
-RUN mkdir -p /app/vendor
-
-########################
-# 3) Runtime image (Apache)
-########################
-FROM php:8.2-apache AS runtime
 WORKDIR /var/www/html
 
-# Install minimal system packages required at runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libzip-dev libpng-dev libonig-dev libxml2-dev \
-    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif bcmath gd zip || true \
-    && rm -rf /var/lib/apt/lists/*
+# Copy composer files first to leverage layer caching, install deps or download vendor
+ARG ARTIFACT_URL
+COPY composer.json composer.lock* /var/www/html/
+RUN sh -lc '\
+        if [ -n "${ARTIFACT_URL}" ]; then \
+            echo "Downloading prebuilt vendor from ${ARTIFACT_URL}"; \
+            curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz && mkdir -p /var/www/html/vendor && tar -xzf /tmp/vendor.tar.gz -C /var/www/html/vendor; \
+        else \
+            composer install --no-interaction --prefer-dist --optimize-autoloader || true; \
+        fi'
 
-# Copy composer binary (optional, for artisan commands later)
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-# Copy application files (exclude vendor and node modules via .dockerignore)
+# Copy application source
 COPY . /var/www/html
 
-# Copy vendor from composer-stage
-COPY --from=composer-stage /app/vendor /var/www/html/vendor
-
-# Copy built frontend assets
+# Copy built frontend from node stage into public
 COPY --from=node-build /app/public /var/www/html/public
 
-# Permissions and apache config
+# Ensure storage and cache directories exist and are writable
 RUN mkdir -p /var/www/html/storage /var/www/html/bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true \
-    && sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/*.conf \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
+
+# Ensure Apache serves the `public` directory
+RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/*.conf \
     && sed -ri 's!<Directory /var/www/html>!<Directory /var/www/html/public>!g' /etc/apache2/apache2.conf || true
 
+# Enable mod_rewrite for Laravel routing
 RUN a2enmod rewrite headers
 
+# Expose HTTP port
 EXPOSE 80
 
+# Copy start script and make executable
 COPY scripts/start-railway.sh /var/www/html/scripts/start-railway.sh
 RUN chmod +x /var/www/html/scripts/start-railway.sh || true
 
+# Default command: run our start script which will run migrations (optional) then start Apache
 CMD ["sh", "/var/www/html/scripts/start-railway.sh"]

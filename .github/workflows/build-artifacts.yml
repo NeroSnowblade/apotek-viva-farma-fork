@@ -1,0 +1,53 @@
+name: Build and publish artifacts
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v4
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, zip, gd
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Composer
+        run: composer --version || curl -sS https://getcomposer.org/installer | php && sudo mv composer.phar /usr/local/bin/composer
+
+      - name: Install PHP deps and create vendor archive
+        run: |
+          composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+          tar -czf vendor.tar.gz vendor
+
+      - name: Install Node deps and build public and archive
+        run: |
+          npm ci --prefer-offline --no-audit --progress=false
+          npm run build
+          tar -czf public.tar.gz public
+
+      - name: Create artifacts branch and push archives
+        env:
+          GIT_EMAIL: actions@github.com
+          GIT_NAME: GitHub Actions
+        run: |
+          git config user.email "$GIT_EMAIL"
+          git config user.name "$GIT_NAME"
+          git checkout --orphan artifacts || git checkout artifacts
+          git rm -rf . || true
+          # Copy archive files
+          git add -f vendor.tar.gz public.tar.gz
+          git commit -m "chore: publish build artifacts" || true
+          git push --force origin HEAD:artifacts

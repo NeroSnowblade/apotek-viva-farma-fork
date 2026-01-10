@@ -16,17 +16,22 @@ WORKDIR /app
 
 # Copy package files first to leverage cache
 COPY package.json package-lock.json* ./
+ARG ARTIFACT_URL
 COPY vite.config.js postcss.config.js tailwind.config.js ./
 
 # Use BuildKit cache for npm (explicit cache id)
 RUN --mount=type=cache,id=cache-npm,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --progress=false
+    sh -lc '\
+        if [ -n "${ARTIFACT_URL}" ]; then \
+            echo "Downloading prebuilt frontend from ${ARTIFACT_URL}"; \
+            curl -fSL "${ARTIFACT_URL}/public.tar.gz" -o /tmp/public.tar.gz && mkdir -p public && tar -xzf /tmp/public.tar.gz -C public; \
+        else \
+            npm ci --prefer-offline --no-audit --progress=false && npm run build; \
+        fi'
 
 # Copy only resources that are needed to build frontend
 COPY resources resources
 COPY public public
-
-RUN npm run build
 
 ########################
 # 2) Composer / vendor stage
@@ -36,6 +41,7 @@ WORKDIR /app
 
 # Install minimal system deps and PHP extensions required by typical Laravel packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     git \
     zip unzip libzip-dev libpng-dev libonig-dev libxml2-dev \
     && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif bcmath gd zip \
@@ -45,9 +51,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Copy composer files and install dependencies using explicit cache id for composer
+ARG ARTIFACT_URL
 COPY composer.json composer.lock ./
 RUN --mount=type=cache,id=cache-composer,target=/root/.composer/cache \
-    composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+    sh -lc '\
+        if [ -n "${ARTIFACT_URL}" ]; then \
+            echo "Downloading prebuilt vendor from ${ARTIFACT_URL}"; \
+            curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz && mkdir -p vendor && tar -xzf /tmp/vendor.tar.gz -C vendor; \
+        else \
+            composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress; \
+        fi'
 
 # Ensure vendor directory exists (will be copied to runtime)
 RUN mkdir -p /app/vendor
