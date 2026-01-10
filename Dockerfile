@@ -74,16 +74,21 @@ RUN printf '%s\n' "server {" \
   "    server_name _;" \
   "    root /var/www/html/public;" \
   "    index index.php index.html;" \
-  "    location / { try_files \$uri /index.php?\$query_string; }" \
-  "    location ~ \.php$ {" \
-  "        include fastcgi_params;" \
-  "        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;" \
-  "        fastcgi_index index.php;" \
-  "        fastcgi_param SCRIPT_FILENAME /var/www/html/public\$fastcgi_script_name;" \
-  "    }" \
+    "    location / { try_files \$uri /index.php?\$query_string; }" \
+    "    location ~ \.php$ {" \
+    "        include fastcgi_params;" \
+    "        fastcgi_pass 127.0.0.1:9000;" \
+    "        fastcgi_index index.php;" \
+    "        fastcgi_param SCRIPT_FILENAME /var/www/html/public\$fastcgi_script_name;" \
+    "    }" \
   "    location ~ /\.ht { deny all; }" \
   "}" > /etc/nginx/sites-available/default
 RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+# Configure php-fpm to listen on TCP 127.0.0.1:9000 instead of unix socket
+RUN if [ -f /usr/local/etc/php-fpm.d/www.conf ]; then \
+            sed -ri "s!^listen\s*=\s*.*$!listen = 127.0.0.1:9000!" /usr/local/etc/php-fpm.d/www.conf || true; \
+        fi
 
 # Expose HTTP port
 EXPOSE 80
