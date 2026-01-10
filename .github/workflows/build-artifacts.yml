@@ -56,9 +56,23 @@ jobs:
         run: |
           git config user.email "$GIT_EMAIL"
           git config user.name "$GIT_NAME"
+          # Ensure archives exist
+          if [ ! -f vendor.tar.gz ] || [ ! -f public.tar.gz ]; then
+            echo "Artifacts not found in workspace:";
+            ls -la || true;
+            exit 1;
+          fi
+
+          # Move artifacts to temporary safe location
+          mkdir -p /tmp/artifacts
+          mv vendor.tar.gz public.tar.gz /tmp/artifacts/
+
+          # Create or switch to orphan artifacts branch and remove tracked files
           git checkout --orphan artifacts || git checkout artifacts
           git rm -rf . || true
-          # Copy archive files
+
+          # Move artifacts back into repo root and commit
+          mv /tmp/artifacts/vendor.tar.gz /tmp/artifacts/public.tar.gz ./
           git add -f vendor.tar.gz public.tar.gz
           git commit -m "chore: publish build artifacts" || true
           git push --force origin HEAD:artifacts
