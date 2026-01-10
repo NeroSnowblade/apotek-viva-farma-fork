@@ -25,7 +25,18 @@ jobs:
           node-version: '18'
 
       - name: Install Composer
-        run: composer --version || curl -sS https://getcomposer.org/installer | php && sudo mv composer.phar /usr/local/bin/composer
+        run: |
+          if ! command -v composer >/dev/null 2>&1; then
+            EXPECTED_SIG=$(curl -sS https://composer.github.io/installer.sig)
+            php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+            ACTUAL_SIG=$(php -r "echo hash_file('sha384', 'composer-setup.php');")
+            if [ "$EXPECTED_SIG" != "$ACTUAL_SIG" ]; then
+              echo 'ERROR: Invalid composer installer signature' >&2
+              exit 1
+            fi
+            php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+            php -r "unlink('composer-setup.php');"
+          fi
 
       - name: Install PHP deps and create vendor archive
         run: |
