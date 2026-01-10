@@ -1,64 +1,92 @@
-### Multi-stage Dockerfile (builds frontend assets so runtime only runs php artisan serve)
+# syntax=docker/dockerfile:1.4
 
-# Stage 1: Build frontend assets with Node (use non-alpine image for compatibility)
+############################################################
+# Fast multi-stage build for Laravel on Railway
+# - Uses BuildKit cache mounts for npm & composer
+# - Installs PHP extensions in composer stage so vendor can be copied
+# - Builds frontend in a separate Node stage
+# To use: either set Railway to use this Dockerfile, or rename to Dockerfile
+############################################################
+
+########################
+# 1) Node build (frontend)
+########################
 FROM node:18 AS node-build
 WORKDIR /app
 
-# Copy package files and lockfile if present, then install and build
-COPY package.json package-lock.json* vite.config.js postcss.config.js tailwind.config.js ./
+# Copy package files first to leverage cache
+COPY package.json package-lock.json* ./
+COPY vite.config.js postcss.config.js tailwind.config.js ./
+
+# Use BuildKit cache for npm
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit --progress=false
+
+# Copy only resources that are needed to build frontend
 COPY resources resources
-RUN npm ci --prefer-offline --no-audit --progress=false
+COPY public public
+
 RUN npm run build
 
-# Stage 2: PHP runtime (Apache)
-FROM php:8.2-apache
+########################
+# 2) Composer / vendor stage
+########################
+FROM php:8.2-cli AS composer-stage
+WORKDIR /app
 
-# Install system deps and PHP extensions required by Laravel (including SQLite)
-RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    libzip-dev \
-    libsqlite3-dev \
-    zip \
-    unzip \
+# Install minimal system deps and PHP extensions required by typical Laravel packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    procps \
-    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif pcntl bcmath gd zip || true \
+    zip unzip libzip-dev libpng-dev libonig-dev libxml2-dev \
+    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif bcmath gd zip \
     && rm -rf /var/lib/apt/lists/*
 
-# Composer (copy from official composer image)
+# Copy composer binary from official composer image (ensures compatible composer)
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# Copy composer files and install dependencies using cache mount
+COPY composer.json composer.lock ./
+RUN --mount=type=cache,target=/root/.composer/cache \
+    composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+
+# Copy only vendor-related files (if any post-install scripts rely on source files, adjust accordingly)
+RUN mkdir -p /app/vendor
+
+########################
+# 3) Runtime image (Apache)
+########################
+FROM php:8.2-apache AS runtime
 WORKDIR /var/www/html
 
-# Copy composer files first to leverage layer caching, install deps
-COPY composer.json composer.lock* /var/www/html/
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader || true
+# Install minimal system packages required at runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libzip-dev libpng-dev libonig-dev libxml2-dev \
+    && docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring exif bcmath gd zip || true \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application source
+# Copy composer binary (optional, for artisan commands later)
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Copy application files (exclude vendor and node modules via .dockerignore)
 COPY . /var/www/html
 
-# Copy built frontend from node stage into public
+# Copy vendor from composer-stage
+COPY --from=composer-stage /app/vendor /var/www/html/vendor
+
+# Copy built frontend assets
 COPY --from=node-build /app/public /var/www/html/public
 
-# Ensure storage and cache directories exist and are writable
+# Permissions and apache config
 RUN mkdir -p /var/www/html/storage /var/www/html/bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
-
-# Ensure Apache serves the `public` directory
-RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/*.conf \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true \
+    && sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/*.conf \
     && sed -ri 's!<Directory /var/www/html>!<Directory /var/www/html/public>!g' /etc/apache2/apache2.conf || true
 
-# Enable mod_rewrite for Laravel routing
 RUN a2enmod rewrite headers
 
-# Expose HTTP port
 EXPOSE 80
 
-# Copy start script and make executable
 COPY scripts/start-railway.sh /var/www/html/scripts/start-railway.sh
 RUN chmod +x /var/www/html/scripts/start-railway.sh || true
 
-# Default command: run our start script which will run migrations (optional) then start Apache
 CMD ["sh", "/var/www/html/scripts/start-railway.sh"]
