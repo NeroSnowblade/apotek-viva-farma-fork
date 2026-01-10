@@ -37,6 +37,40 @@ if [ "${DB_CONNECTION}" = "sqlite" ]; then
   fi
 fi
 
+# Debug: list enabled Apache modules and config test to help diagnose MPM errors
+if command -v apache2ctl >/dev/null 2>&1; then
+  echo "--- Apache mods-enabled ---"
+  ls -la /etc/apache2/mods-enabled || true
+  echo "--- apache2ctl -M ---"
+  apache2ctl -M || true
+  echo "--- apache2ctl configtest ---"
+  apache2ctl configtest || true
+fi
+
+# Ensure vendor dependencies exist; try ARTIFACT_URL then composer install
+if [ ! -f vendor/autoload.php ]; then
+  echo "vendor/autoload.php not found. Attempting to restore vendor..."
+  if [ -n "${ARTIFACT_URL}" ]; then
+    echo "ARTIFACT_URL is set, attempting download from ${ARTIFACT_URL}"
+    if curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz; then
+      mkdir -p vendor
+      tar -xzf /tmp/vendor.tar.gz -C ./
+      echo "Extracted vendor from artifact." || true
+    else
+      echo "Failed to download vendor.tar.gz from ${ARTIFACT_URL}" >&2
+    fi
+  fi
+
+  if [ ! -f vendor/autoload.php ]; then
+    echo "vendor still missing; attempting composer install (may take longer)..."
+    if command -v composer >/dev/null 2>&1; then
+      composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction || true
+    else
+      echo "composer not found in container; skipping composer install." >&2
+    fi
+  fi
+fi
+
 # (Optional) Run seeders if RAILWAY_RUN_SEEDS is set
 if [ "${RAILWAY_RUN_SEEDS:-false}" = "true" ]; then
   SEED_CLASS=${RAILWAY_SEED_CLASS:-DatabaseSeeder}
