@@ -27,7 +27,7 @@
                         </div>
                     @endif
                     
-                    <form method="POST" action="{{ route('transaksi.store') }}">
+                    <form method="POST" action="{{ auth()->check() && auth()->user()->level === 'customer' ? route('transaksi.store.customer') : route('transaksi.store') }}">
                         @csrf
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -120,10 +120,18 @@
                                 <input type="hidden" name="totalHarga" :value="grandTotal">
 
                                 <div class="mt-6">
-                                    <button type="submit" :disabled="cart.length === 0"
-                                        class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none disabled:opacity-50">
-                                        Simpan Transaksi
-                                    </button>
+                                    @if(auth()->check() && auth()->user()->level === 'customer')
+                                        <input type="hidden" name="status" value="pending">
+                                        <button type="submit" :disabled="cart.length === 0"
+                                            class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none disabled:opacity-50">
+                                            Pesan Obat
+                                        </button>
+                                    @else
+                                        <button type="submit" :disabled="cart.length === 0"
+                                            class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none disabled:opacity-50">
+                                            Simpan Transaksi
+                                        </button>
+                                    @endif
                                 </div>
                             </div>
 

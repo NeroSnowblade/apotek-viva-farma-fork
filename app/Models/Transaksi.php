@@ -18,6 +18,7 @@ class Transaksi extends Model
         'idUser',
         'tanggalTransaksi',
         'totalHarga',
+        'status',
     ];
 
     /**

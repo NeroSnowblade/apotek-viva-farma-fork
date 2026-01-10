@@ -35,6 +35,11 @@ class TransaksiController extends Controller
                 ->whereYear('tanggalTransaksi', $tanggal->year);
         }
 
+        // Jika user customer, batasi hanya transaksi milik user tersebut
+        if (auth()->check() && auth()->user()->level === 'customer') {
+            $query->where('idUser', auth()->id());
+        }
+
         // 4. Eksekusi query dengan paginasi
         $transaksis = $query->paginate(10);
 
@@ -71,11 +76,16 @@ class TransaksiController extends Controller
         try {
             DB::beginTransaction();
 
+            // Tentukan status: jika request mengirim status, gunakan; jika tidak,
+            // customer => pending, selain customer => lunas
+            $status = $request->input('status') ?? (auth()->check() && auth()->user()->level === 'customer' ? 'pending' : 'lunas');
+
             // 3. Buat record transaksi utama
             $transaksi = Transaksi::create([
-                'idUser' => Auth::id(), // ID kasir yang sedang login
+                'idUser' => Auth::id(), // ID pembuat transaksi (kasir/admin/customer)
                 'tanggalTransaksi' => now(),
                 'totalHarga' => $request->totalHarga,
+                'status' => $status,
             ]);
 
             // 4. Looping untuk menyimpan detail transaksi dan mengurangi stok

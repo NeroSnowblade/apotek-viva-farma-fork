@@ -23,6 +23,9 @@ Route::get('/', function (Request $request) {
     if ($level === 'apoteker') {
         return redirect()->route('apoteker.dashboard');
     }
+    if ($level === 'customer') {
+        return redirect()->route('customer.index');
+    }
     // default untuk kasir atau lainnya
     return redirect()->route('kasir.dashboard');
 });
@@ -65,6 +68,12 @@ Route::middleware(['auth', 'check.level:kasir,admin'])->group(function () {
     Route::get('/transaksi/{transaksi}/delete', [TransaksiController::class, 'destroy'])->name('transaksi.delete');
 });
 
+// Routes for customers to create transactions (pesan obat)
+Route::middleware(['auth', 'check.level:customer'])->group(function () {
+    Route::get('/customer/transaksi/baru', [TransaksiController::class, 'create'])->name('transaksi.create.customer');
+    Route::post('/customer/transaksi', [TransaksiController::class, 'store'])->name('transaksi.store.customer');
+});
+
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -76,3 +85,12 @@ Route::middleware('auth')->group(function () {
 });
 
 require __DIR__.'/auth.php';
+
+// Customer public routes: register and browsing
+use App\Http\Controllers\CustomerAuthController;
+use App\Http\Controllers\CustomerController;
+
+Route::get('/customer/register', [CustomerAuthController::class, 'showRegisterForm'])->name('customer.register.form');
+Route::post('/customer/register', [CustomerAuthController::class, 'register'])->name('customer.register');
+
+Route::get('/customer', [TransaksiController::class, 'create'])->name('customer.index');

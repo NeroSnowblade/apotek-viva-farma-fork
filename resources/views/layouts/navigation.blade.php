@@ -26,13 +26,26 @@
                         <x-nav-link :href="route('kasir.dashboard')" :active="request()->routeIs('kasir.dashboard')">
                             {{ __('Dashboard') }}
                         </x-nav-link>
+                    @elseif (in_array(Auth::user()->level, ['customer']))
+                        <x-nav-link :href="route('customer.index')" :active="request()->routeIs('customer.index')">
+                            {{ __('Pesan Obat') }}
+                        </x-nav-link>
                     @endif
-                    <x-nav-link :href="route('obat.index')" :active="request()->routeIs('obat.*')">
-                        {{ __('Data Obat') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('transaksi.index')" :active="request()->routeIs('transaksi.index') || request()->routeIs('transaksi.invoice')">
-                        {{ __('Riwayat Transaksi') }}
-                    </x-nav-link>
+                    @if (in_array(Auth::user()->level, ['customer']))
+                        <x-nav-link :href="route('obat.index')" :active="request()->routeIs('obat.*')">
+                            {{ __('Data Obat') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('transaksi.index')" :active="request()->routeIs('transaksi.index') || request()->routeIs('transaksi.invoice')">
+                            {{ __('Riwayat Transaksi') }}
+                        </x-nav-link>
+                    @else
+                        <x-nav-link :href="route('obat.index')" :active="request()->routeIs('obat.*')">
+                            {{ __('Data Obat') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('transaksi.index')" :active="request()->routeIs('transaksi.index') || request()->routeIs('transaksi.invoice')">
+                            {{ __('Riwayat Transaksi') }}
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -92,9 +105,21 @@
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
-            </x-responsive-nav-link>
+            @if(in_array(Auth::user()->level, ['customer']))
+                <x-responsive-nav-link :href="route('customer.index')" :active="request()->routeIs('customer.index')">
+                    {{ __('Pesan Obat') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('obat.index')" :active="request()->routeIs('obat.*')">
+                    {{ __('Data Obat') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('transaksi.index')" :active="request()->routeIs('transaksi.index') || request()->routeIs('transaksi.invoice')">
+                    {{ __('Riwayat Transaksi') }}
+                </x-responsive-nav-link>
+            @else
+                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->

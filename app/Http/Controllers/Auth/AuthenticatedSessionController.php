@@ -36,6 +36,8 @@ class AuthenticatedSessionController extends Controller
                 return redirect()->route('apoteker.dashboard');
             case 'kasir':
                 return redirect()->route('kasir.dashboard');
+            case 'customer':
+                return redirect()->route('customer.index');
             default:
                 Auth::logout(); // Logout jika peran tidak dikenali
                 return redirect('/login')->with('error', 'Peran tidak valid.');
