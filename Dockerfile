@@ -67,7 +67,6 @@ RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /
 
 # Enable mod_rewrite for Laravel routing
 RUN rm -f /etc/apache2/mods-enabled/mpm_*.load /etc/apache2/mods-enabled/mpm_*.conf || true \
-    && a2enmod mpm_prefork || true \
     && a2enmod rewrite headers
 
 # Expose HTTP port
