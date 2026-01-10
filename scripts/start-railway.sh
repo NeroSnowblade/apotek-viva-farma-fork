@@ -92,6 +92,25 @@ if command -v php >/dev/null 2>&1 && [ -f artisan ]; then
   php artisan cache:clear || true
 fi
 
+# Debug: show configured view compiled path and check it's writable
+if command -v php >/dev/null 2>&1 && [ -f vendor/autoload.php ]; then
+  echo "--- Laravel view.compiled (config) ---"
+  php -r "require 'vendor/autoload.php'; \$app = require 'bootstrap/app.php'; echo \$app->make('config')->get('view.compiled') . PHP_EOL;" || true
+  VIEW_COMPILED_PATH=$(php -r "require 'vendor/autoload.php'; \$app = require 'bootstrap/app.php'; echo \$app->make('config')->get('view.compiled');" 2>/dev/null || echo "")
+  if [ -n "${VIEW_COMPILED_PATH}" ]; then
+    echo "Checking path: ${VIEW_COMPILED_PATH}"
+    ls -la "${VIEW_COMPILED_PATH%/*}" || true
+    mkdir -p "${VIEW_COMPILED_PATH%/*}" || true
+    chown -R www-data:www-data "${VIEW_COMPILED_PATH%/*}" || true
+    chmod -R 775 "${VIEW_COMPILED_PATH%/*}" || true
+    # try writing a temp file
+    touch "${VIEW_COMPILED_PATH%/*}/.write_test" && echo "write ok" || echo "write failed"
+    rm -f "${VIEW_COMPILED_PATH%/*}/.write_test" || true
+  else
+    echo "Could not determine view.compiled path from config." || true
+  fi
+fi
+
 # (Optional) Run seeders if RAILWAY_RUN_SEEDS is set
 if [ "${RAILWAY_RUN_SEEDS:-false}" = "true" ]; then
   SEED_CLASS=${RAILWAY_SEED_CLASS:-DatabaseSeeder}
