@@ -66,7 +66,7 @@ RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /
     && sed -ri 's!<Directory /var/www/html>!<Directory /var/www/html/public>!g' /etc/apache2/apache2.conf || true
 
 # Enable mod_rewrite for Laravel routing
-RUN a2dismod mpm_event mpm_worker || true \
+RUN rm -f /etc/apache2/mods-enabled/mpm_*.load /etc/apache2/mods-enabled/mpm_*.conf || true \
     && a2enmod mpm_prefork || true \
     && a2enmod rewrite headers
 
