@@ -19,7 +19,7 @@ COPY package.json package-lock.json* ./
 COPY vite.config.js postcss.config.js tailwind.config.js ./
 
 # Use BuildKit cache for npm (explicit cache id)
-RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
+RUN --mount=type=cache,id=cache-npm,target=/root/.npm \
     npm ci --prefer-offline --no-audit --progress=false
 
 # Copy only resources that are needed to build frontend
@@ -46,7 +46,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Copy composer files and install dependencies using explicit cache id for composer
 COPY composer.json composer.lock ./
-RUN --mount=type=cache,id=composer-cache,target=/root/.composer/cache \
+RUN --mount=type=cache,id=cache-composer,target=/root/.composer/cache \
     composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
 
 # Ensure vendor directory exists (will be copied to runtime)
