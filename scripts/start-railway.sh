@@ -71,6 +71,27 @@ if [ ! -f vendor/autoload.php ]; then
   fi
 fi
 
+# Ensure all Laravel cache dirs exist and are writable
+mkdir -p storage/framework/{cache,sessions,views} bootstrap/cache || true
+chown -R www-data:www-data storage bootstrap/cache || true
+chmod -R 775 storage bootstrap/cache || true
+
+# Ensure APP_KEY exists; generate if missing (best-effort)
+if [ -z "${APP_KEY}" ] || [ "${APP_KEY}" = "" ]; then
+  echo "APP_KEY missing; attempting to generate one..."
+  if command -v php >/dev/null 2>&1 && [ -f artisan ]; then
+    php artisan key:generate --ansi || true
+  fi
+fi
+
+# Clear compiled caches so Laravel can write fresh cache files
+if command -v php >/dev/null 2>&1 && [ -f artisan ]; then
+  php artisan config:clear || true
+  php artisan route:clear || true
+  php artisan view:clear || true
+  php artisan cache:clear || true
+fi
+
 # (Optional) Run seeders if RAILWAY_RUN_SEEDS is set
 if [ "${RAILWAY_RUN_SEEDS:-false}" = "true" ]; then
   SEED_CLASS=${RAILWAY_SEED_CLASS:-DatabaseSeeder}
