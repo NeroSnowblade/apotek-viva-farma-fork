@@ -18,7 +18,7 @@ RUN sh -lc '\
         fi'
 
 # Stage 2: PHP runtime (Apache)
-FROM php:8.2-fpm
+FROM php:8.2-apache
 
 # Install system deps and PHP extensions required by Laravel (including SQLite)
 RUN apt-get update && apt-get install -y \
@@ -40,16 +40,10 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy composer files first to leverage layer caching, install deps or download vendor
-ARG ARTIFACT_URL
+# Copy composer files first to leverage layer caching. We DO NOT run composer
+# or download vendor here; installation will be performed manually after deploy
+# (set AUTO_RESTORE_VENDOR=true to enable automatic restore during container start).
 COPY composer.json composer.lock* /var/www/html/
-RUN sh -lc '\
-        if [ -n "${ARTIFACT_URL}" ]; then \
-            echo "Downloading prebuilt vendor from ${ARTIFACT_URL}"; \
-            curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz && mkdir -p /var/www/html/vendor && tar -xzf /tmp/vendor.tar.gz -C /var/www/html/vendor; \
-        else \
-            composer install --no-interaction --prefer-dist --optimize-autoloader; \
-        fi'
 
 # Copy application source
 COPY . /var/www/html
@@ -61,34 +55,10 @@ COPY --from=node-build /app/public /var/www/html/public
 RUN mkdir -p /var/www/html/storage /var/www/html/bootstrap/cache \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
 
-# Install nginx and necessary packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    supervisor \
-    && rm -rf /var/lib/apt/lists/*
-
-# Configure nginx to serve Laravel from /var/www/html/public and pass PHP to php-fpm
-RUN rm /etc/nginx/sites-enabled/default || true
-RUN printf '%s\n' "server {" \
-  "    listen 80;" \
-  "    server_name _;" \
-  "    root /var/www/html/public;" \
-  "    index index.php index.html;" \
-    "    location / { try_files \$uri /index.php?\$query_string; }" \
-    "    location ~ \.php$ {" \
-    "        include fastcgi_params;" \
-    "        fastcgi_pass 127.0.0.1:9000;" \
-    "        fastcgi_index index.php;" \
-    "        fastcgi_param SCRIPT_FILENAME /var/www/html/public\$fastcgi_script_name;" \
-    "    }" \
-  "    location ~ /\.ht { deny all; }" \
-  "}" > /etc/nginx/sites-available/default
-RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-
-# Configure php-fpm to listen on TCP 127.0.0.1:9000 instead of unix socket
-RUN if [ -f /usr/local/etc/php-fpm.d/www.conf ]; then \
-            sed -ri "s!^listen\s*=\s*.*$!listen = 127.0.0.1:9000!" /usr/local/etc/php-fpm.d/www.conf || true; \
-        fi
+# Configure Apache document root to Laravel `public` and enable useful modules
+RUN a2enmod rewrite headers || true
+RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/000-default.conf || true
+RUN sed -ri 's!<Directory /var/www/>!<Directory /var/www/html/public>!g' /etc/apache2/apache2.conf || true
 
 # Expose HTTP port
 EXPOSE 80

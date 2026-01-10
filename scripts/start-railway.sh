@@ -37,61 +37,63 @@ if [ "${DB_CONNECTION}" = "sqlite" ]; then
   fi
 fi
 
-# Debug: list enabled Apache modules and config test to help diagnose MPM errors
-if command -v apache2ctl >/dev/null 2>&1; then
-  echo "--- Apache mods-enabled ---"
-  ls -la /etc/apache2/mods-enabled || true
-  echo "--- apache2ctl -M ---"
-  apache2ctl -M || true
-  echo "--- apache2ctl configtest ---"
-  apache2ctl configtest || true
-fi
+# (removed verbose apache debug checks to reduce startup noise)
 
-# Ensure vendor dependencies exist; try ARTIFACT_URL then composer install
+# Ensure vendor dependencies exist. By default we DO NOT attempt to restore or
+# install vendor at container start — this repository defers setup to a manual
+# step (via Railway CLI or execution of `composer install`). To enable automatic
+# restore at start time set env `AUTO_RESTORE_VENDOR=true` and optionally
+# `ARTIFACT_URL` to a artifacts branch URL.
 if [ ! -f vendor/autoload.php ]; then
-  echo "vendor/autoload.php not found. Attempting to restore vendor..."
-  if [ -n "${ARTIFACT_URL}" ]; then
-    echo "ARTIFACT_URL is set, attempting download from ${ARTIFACT_URL}"
-    echo "Downloading ${ARTIFACT_URL}/vendor.tar.gz to /tmp/vendor.tar.gz"
-    if curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz; then
-      echo "Download OK. /tmp/vendor.tar.gz size: $(stat -c%s /tmp/vendor.tar.gz 2>/dev/null || echo 'unknown')"
-      mkdir -p vendor
-      if tar -tzf /tmp/vendor.tar.gz >/dev/null 2>&1; then
-        tar -xzf /tmp/vendor.tar.gz -C ./
-        echo "Extracted vendor from artifact. Contents:"
-        ls -la vendor | sed -n '1,200p' || true
+  echo "vendor/autoload.php not found. AUTO_RESTORE_VENDOR=${AUTO_RESTORE_VENDOR:-true}"
+  if [ "${AUTO_RESTORE_VENDOR:-true}" = "true" ]; then
+    echo "AUTO_RESTORE_VENDOR=true -> attempting restore (ARTIFACT_URL=${ARTIFACT_URL:-<none>})"
+    if [ -n "${ARTIFACT_URL}" ]; then
+      echo "Downloading ${ARTIFACT_URL}/vendor.tar.gz to /tmp/vendor.tar.gz"
+      if curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz; then
+        echo "Download OK. /tmp/vendor.tar.gz size: $(stat -c%s /tmp/vendor.tar.gz 2>/dev/null || echo 'unknown')"
+        mkdir -p vendor
+        if tar -tzf /tmp/vendor.tar.gz >/dev/null 2>&1; then
+          tar -xzf /tmp/vendor.tar.gz -C ./
+          echo "Extracted vendor from artifact. Contents:"
+          ls -la vendor | sed -n '1,200p' || true
+        else
+          echo "Downloaded vendor.tar.gz is not a valid tar.gz" >&2
+        fi
       else
-        echo "Downloaded vendor.tar.gz is not a valid tar.gz" >&2
+        echo "Failed to download vendor.tar.gz from ${ARTIFACT_URL}" >&2
       fi
-    else
-      echo "Failed to download vendor.tar.gz from ${ARTIFACT_URL}" >&2
     fi
-  fi
 
-  if [ ! -f vendor/autoload.php ]; then
-    echo "vendor still missing; attempting composer install (may take longer)..."
-    if command -v composer >/dev/null 2>&1; then
-      composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction || RC=$?
-      RC=${RC:-0}
-      echo "composer install exit code: $RC"
-      if [ $RC -ne 0 ]; then
-        echo "composer install failed. See composer output above." >&2
+    if [ ! -f vendor/autoload.php ]; then
+      echo "vendor still missing; attempting composer install (may take longer)..."
+      if command -v composer >/dev/null 2>&1; then
+        composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction || RC=$?
+        RC=${RC:-0}
+        echo "composer install exit code: $RC"
+        if [ $RC -ne 0 ]; then
+          echo "composer install failed. See composer output above." >&2
+        else
+          echo "composer install completed successfully"
+        fi
       else
-        echo "composer install completed successfully"
+        echo "composer not found in container; skipping composer install." >&2
       fi
-    else
-      echo "composer not found in container; skipping composer install." >&2
     fi
-  fi
 
-  echo "Vendor status after restore attempts:"
-  ls -la vendor 2>/dev/null || echo "vendor directory not present"
-  if [ ! -f vendor/autoload.php ]; then
-    echo "FATAL: vendor/autoload.php still missing after attempts. Aborting startup." >&2
-    # keep container alive for debugging: show /var/www/html listing and exit non-zero
-    echo "--- /var/www/html listing ---"
-    ls -la /var/www/html || true
-    exit 1
+    echo "Vendor status after restore attempts:"
+    ls -la vendor 2>/dev/null || echo "vendor directory not present"
+    if [ ! -f vendor/autoload.php ]; then
+      echo "FATAL: vendor/autoload.php still missing after attempts. Aborting startup." >&2
+      echo "--- /var/www/html listing ---"
+      ls -la /var/www/html || true
+      exit 1
+    fi
+  else
+    echo "AUTO_RESTORE_VENDOR not set. Skipping automatic vendor restore."
+    echo "To install manually, run:"
+    echo "  railway run 'composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction' --cwd /var/www/html" || true
+    echo "Or exec into the container and run composer there. Proceeding without vendor (container will continue)."
   fi
 fi
 
@@ -118,8 +120,33 @@ fi
 
 # Debug: show configured view compiled path and check it's writable
 if command -v php >/dev/null 2>&1 && [ -f vendor/autoload.php ]; then
-  echo "--- Laravel view.compiled (config) ---"
-  php -r "require 'vendor/autoload.php'; \$app = require 'bootstrap/app.php'; echo \$app->make('config')->get('view.compiled') . PHP_EOL;" || true
+  echo "--- Laravel bootstrap diagnostic ---"
+  cat > /tmp/laravel_bootstrap_check.php <<'PHP'
+<?php
+// Lightweight bootstrap diagnostic: catch exceptions and print useful info
+try {
+    echo "php version: " . PHP_VERSION . PHP_EOL;
+    echo "Loaded extensions: " . implode(', ', get_loaded_extensions()) . PHP_EOL;
+    require __DIR__ . '/../../vendor/autoload.php';
+    $app = require __DIR__ . '/../../bootstrap/app.php';
+    echo "Application class: " . get_class($app) . PHP_EOL;
+    $config = $app->make('config');
+    echo "view.compiled: " . $config->get('view.compiled') . PHP_EOL;
+    echo "environment: " . $app->environment() . PHP_EOL;
+} catch (Throwable $e) {
+    echo "BOOTSTRAP ERROR: " . get_class($e) . ': ' . $e->getMessage() . PHP_EOL;
+    echo $e->getTraceAsString() . PHP_EOL;
+    // print some filesystem info
+    echo "--- bootstrap/app.php exists? ";
+    echo (file_exists(__DIR__ . '/../../bootstrap/app.php') ? 'yes' : 'no') . PHP_EOL;
+    echo "--- vendor/laravel/framework exists? ";
+    echo (is_dir(__DIR__ . '/../../vendor/laravel/framework') ? 'yes' : 'no') . PHP_EOL;
+    exit(1);
+}
+PHP
+
+  # run the diagnostic php script
+  php /tmp/laravel_bootstrap_check.php || echo "laravel bootstrap diagnostic returned non-zero"
   VIEW_COMPILED_PATH=$(php -r "require 'vendor/autoload.php'; \$app = require 'bootstrap/app.php'; echo \$app->make('config')->get('view.compiled');" 2>/dev/null || echo "")
   if [ -n "${VIEW_COMPILED_PATH}" ]; then
     echo "Checking path: ${VIEW_COMPILED_PATH}"
@@ -148,9 +175,11 @@ PORT=${PORT:-8000}
 echo "PORT=${PORT} -- starting server"
 
 # Start PHP-FPM + nginx if available; otherwise fallback to php artisan serve
-if command -v php-fpm >/dev/null 2>&1 && command -v nginx >/dev/null 2>&1; then
+if command -v apache2ctl >/dev/null 2>&1; then
+  echo "Starting Apache in foreground..."
+  exec apache2ctl -D FOREGROUND
+elif command -v php-fpm >/dev/null 2>&1 && command -v nginx >/dev/null 2>&1; then
   echo "Starting php-fpm and nginx..."
-  # ensure php-fpm is running (daemonize), then run nginx in foreground
   php-fpm -D || true
   exec nginx -g 'daemon off;'
 else
