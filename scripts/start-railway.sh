@@ -52,10 +52,17 @@ if [ ! -f vendor/autoload.php ]; then
   echo "vendor/autoload.php not found. Attempting to restore vendor..."
   if [ -n "${ARTIFACT_URL}" ]; then
     echo "ARTIFACT_URL is set, attempting download from ${ARTIFACT_URL}"
+    echo "Downloading ${ARTIFACT_URL}/vendor.tar.gz to /tmp/vendor.tar.gz"
     if curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz; then
+      echo "Download OK. /tmp/vendor.tar.gz size: $(stat -c%s /tmp/vendor.tar.gz 2>/dev/null || echo 'unknown')"
       mkdir -p vendor
-      tar -xzf /tmp/vendor.tar.gz -C ./
-      echo "Extracted vendor from artifact." || true
+      if tar -tzf /tmp/vendor.tar.gz >/dev/null 2>&1; then
+        tar -xzf /tmp/vendor.tar.gz -C ./
+        echo "Extracted vendor from artifact. Contents:"
+        ls -la vendor | sed -n '1,200p' || true
+      else
+        echo "Downloaded vendor.tar.gz is not a valid tar.gz" >&2
+      fi
     else
       echo "Failed to download vendor.tar.gz from ${ARTIFACT_URL}" >&2
     fi
@@ -64,16 +71,27 @@ if [ ! -f vendor/autoload.php ]; then
   if [ ! -f vendor/autoload.php ]; then
     echo "vendor still missing; attempting composer install (may take longer)..."
     if command -v composer >/dev/null 2>&1; then
-      composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-      RC=$?
+      composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction || RC=$?
+      RC=${RC:-0}
+      echo "composer install exit code: $RC"
       if [ $RC -ne 0 ]; then
-        echo "composer install failed with exit code $RC" >&2
+        echo "composer install failed. See composer output above." >&2
       else
         echo "composer install completed successfully"
       fi
     else
       echo "composer not found in container; skipping composer install." >&2
     fi
+  fi
+
+  echo "Vendor status after restore attempts:"
+  ls -la vendor 2>/dev/null || echo "vendor directory not present"
+  if [ ! -f vendor/autoload.php ]; then
+    echo "FATAL: vendor/autoload.php still missing after attempts. Aborting startup." >&2
+    # keep container alive for debugging: show /var/www/html listing and exit non-zero
+    echo "--- /var/www/html listing ---"
+    ls -la /var/www/html || true
+    exit 1
   fi
 fi
 
