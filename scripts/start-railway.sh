@@ -83,11 +83,12 @@ fi
 PORT=${PORT:-8000}
 echo "PORT=${PORT} -- starting server"
 
-# If Apache is available (php:apache image), prefer it. Otherwise fallback to php artisan serve.
-if command -v apache2-foreground >/dev/null 2>&1; then
-  echo "Starting Apache (apache2-foreground)..."
-  # exec so PID 1 is apache and logs are attached to container
-  exec apache2-foreground
+# Start PHP-FPM + nginx if available; otherwise fallback to php artisan serve
+if command -v php-fpm >/dev/null 2>&1 && command -v nginx >/dev/null 2>&1; then
+  echo "Starting php-fpm and nginx..."
+  # ensure php-fpm is running (daemonize), then run nginx in foreground
+  php-fpm -D || true
+  exec nginx -g 'daemon off;'
 else
   echo "Starting PHP built-in server on 0.0.0.0:${PORT}"
   exec php artisan serve --host=0.0.0.0 --port=${PORT}

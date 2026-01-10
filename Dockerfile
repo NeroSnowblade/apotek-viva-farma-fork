@@ -18,7 +18,7 @@ RUN sh -lc '\
         fi'
 
 # Stage 2: PHP runtime (Apache)
-FROM php:8.2-apache
+FROM php:8.2-fpm
 
 # Install system deps and PHP extensions required by Laravel (including SQLite)
 RUN apt-get update && apt-get install -y \
@@ -61,13 +61,29 @@ COPY --from=node-build /app/public /var/www/html/public
 RUN mkdir -p /var/www/html/storage /var/www/html/bootstrap/cache \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache || true
 
-# Ensure Apache serves the `public` directory
-RUN sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/*.conf \
-    && sed -ri 's!<Directory /var/www/html>!<Directory /var/www/html/public>!g' /etc/apache2/apache2.conf || true
+# Install nginx and necessary packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nginx \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable mod_rewrite for Laravel routing
-RUN rm -f /etc/apache2/mods-enabled/mpm_*.load /etc/apache2/mods-enabled/mpm_*.conf || true \
-    && a2enmod rewrite headers
+# Configure nginx to serve Laravel from /var/www/html/public and pass PHP to php-fpm
+RUN rm /etc/nginx/sites-enabled/default || true
+RUN printf '%s\n' "server {" \
+  "    listen 80;" \
+  "    server_name _;" \
+  "    root /var/www/html/public;" \
+  "    index index.php index.html;" \
+  "    location / { try_files \$uri /index.php?\$query_string; }" \
+  "    location ~ \.php$ {" \
+  "        include fastcgi_params;" \
+  "        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;" \
+  "        fastcgi_index index.php;" \
+  "        fastcgi_param SCRIPT_FILENAME /var/www/html/public\$fastcgi_script_name;" \
+  "    }" \
+  "    location ~ /\.ht { deny all; }" \
+  "}" > /etc/nginx/sites-available/default
+RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # Expose HTTP port
 EXPOSE 80
