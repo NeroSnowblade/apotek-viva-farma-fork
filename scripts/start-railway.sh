@@ -64,7 +64,13 @@ if [ ! -f vendor/autoload.php ]; then
   if [ ! -f vendor/autoload.php ]; then
     echo "vendor still missing; attempting composer install (may take longer)..."
     if command -v composer >/dev/null 2>&1; then
-      composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction || true
+      composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+      RC=$?
+      if [ $RC -ne 0 ]; then
+        echo "composer install failed with exit code $RC" >&2
+      else
+        echo "composer install completed successfully"
+      fi
     else
       echo "composer not found in container; skipping composer install." >&2
     fi

@@ -48,7 +48,7 @@ RUN sh -lc '\
             echo "Downloading prebuilt vendor from ${ARTIFACT_URL}"; \
             curl -fSL "${ARTIFACT_URL}/vendor.tar.gz" -o /tmp/vendor.tar.gz && mkdir -p /var/www/html/vendor && tar -xzf /tmp/vendor.tar.gz -C /var/www/html/vendor; \
         else \
-            composer install --no-interaction --prefer-dist --optimize-autoloader || true; \
+            composer install --no-interaction --prefer-dist --optimize-autoloader; \
         fi'
 
 # Copy application source
