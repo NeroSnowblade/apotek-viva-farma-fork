@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main, master ]
 
+# Allow workflow to write repository contents when using GITHUB_TOKEN (best-effort).
+# For pushing from forks or when GITHUB_TOKEN is insufficient, provide a PAT in repo secrets.
+permissions:
+  contents: write
+
 jobs:
   build-artifacts:
     runs-on: ubuntu-latest
@@ -75,4 +80,9 @@ jobs:
           mv /tmp/artifacts/vendor.tar.gz /tmp/artifacts/public.tar.gz ./
           git add -f vendor.tar.gz public.tar.gz
           git commit -m "chore: publish build artifacts" || true
-          git push --force origin HEAD:artifacts
+          # Prefer using a PAT stored in repo secret ACTIONS_PAT for pushing.
+          if [ -n "${{ secrets.ACTIONS_PAT }}" ]; then
+            git push --force "https://x-access-token:${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}" HEAD:artifacts
+          else
+            git push --force origin HEAD:artifacts
+          fi
