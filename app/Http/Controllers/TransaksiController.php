@@ -47,7 +47,13 @@ class TransaksiController extends Controller
         //    Agar saat pindah halaman, filter tetap aktif
         $transaksis->appends($request->query());
 
-        return view('transaksi.index', compact('transaksis'));
+        // 6. Hitung jumlah transaksi pending untuk ditampilkan pada badge
+        $pendingCount = 0;
+        if (auth()->check() && in_array(auth()->user()->level, ['kasir', 'admin'])) {
+            $pendingCount = Transaksi::where('status', 'pending')->count();
+        }
+
+        return view('transaksi.index', compact('transaksis', 'pendingCount'));
     }
 
     /**
@@ -161,5 +167,21 @@ class TransaksiController extends Controller
             DB::rollBack();
             return redirect()->route('transaksi.index')->with('error', 'Gagal menghapus transaksi.');
         }
+    }
+
+    /**
+     * Update transaksi (mis. ubah status jadi Lunas).
+     */
+    public function update(Request $request, Transaksi $transaksi)
+    {
+        $request->validate([
+            'status' => 'required|string',
+        ]);
+
+        $oldStatus = $transaksi->status;
+        $transaksi->status = $request->input('status');
+        $transaksi->save();
+
+        return redirect()->route('transaksi.index')->with('success', "Status transaksi diubah dari {$oldStatus} menjadi {$transaksi->status}.");
     }
 }

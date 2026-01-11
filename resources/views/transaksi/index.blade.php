@@ -1,7 +1,10 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('Riwayat Transaksi') }}
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight flex items-center gap-3">
+            <span>{{ __('Riwayat Transaksi') }}</span>
+            @if(Auth::check() && (Auth::user()->level == 'kasir' || Auth::user()->level == 'admin'))
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium {{$pendingCount == 0 ? 'bg-green-600' : 'bg-red-600'}} text-white">{{ $pendingCount ?? 0 }} Transaksi Pending</span>
+            @endif
         </h2>
     </x-slot>
 
@@ -55,6 +58,7 @@
                                     <th class="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Tanggal</th>
                                     <th class="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Nama Kasir</th>
                                     <th class="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Total Harga</th>
+                                    <th class="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Status</th>
                                     <th class="px-4 py-2">Aksi</th>
                                 </tr>
                             </thead>
@@ -74,10 +78,27 @@
                                             {{ number_format($transaksi->totalHarga, 0, ',', '.') }}
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-2">
+                                            @if(strtolower($transaksi->status ?? '') == 'pending')
+                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-yellow-800">Pending</span>
+                                            @elseif(strtolower($transaksi->status ?? '') == 'lunas' || strtolower($transaksi->status ?? '') == 'paid')
+                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Lunas</span>
+                                            @else
+                                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{{ $transaksi->status ?? '-' }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-2">
                                             <a href="{{ route('transaksi.invoice', $transaksi->idTransaksi) }}"
                                                 class="inline-block rounded bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700">
                                                 Lihat Invoice
                                             </a>
+                                            @if(Auth::check() && (Auth::user()->level == 'kasir' || Auth::user()->level == 'admin') && strtolower($transaksi->status ?? '') == 'pending')
+                                                <form action="{{ route('transaksi.update', $transaksi->idTransaksi) }}" method="POST" class="inline-block ml-2">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <input type="hidden" name="status" value="lunas">
+                                                    <button type="submit" class="inline-block rounded bg-green-600 px-4 py-2 text-xs font-medium text-white hover:bg-green-700">Pesanan Selesai</button>
+                                                </form>
+                                            @endif
                                         </td>
                                     </tr>
                                 @empty
